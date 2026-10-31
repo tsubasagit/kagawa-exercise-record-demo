@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>運動記録の一覧（研究用・デモ）</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root { --main:#1f5b8c; --bg:#f4f7fa; --ink:#12324d; --sub:#5b7a94; --line:#d6e2ec; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 "Yu Gothic UI","Hiragino Sans",Meiryo,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--main); color:#fff; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+  header h1 { margin:0; font-size:19px; }
+  header p { margin:0; font-size:12px; opacity:.85; }
+  .demo { background:#fff6d6; color:#6b5300; font-size:12px; padding:6px 20px; }
+  main { max-width:1200px; margin:0 auto; padding:16px 20px 40px; }
+  .card { background:#fff; border-radius:12px; padding:16px 18px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  h2 { font-size:16px; margin:0 0 10px; }
+  .filters { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .filters label { display:block; font-size:12px; color:var(--sub); margin-bottom:3px; }
+  input, select { font-size:14px; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  button { font-size:14px; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; }
+  .primary { background:var(--main); color:#fff; font-weight:bold; }
+  .ghost { background:#e8f0f6; color:var(--main); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
+  .stat { background:#f4f8fb; border-radius:10px; padding:10px 12px; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { font-size:12px; color:var(--sub); }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; min-width:760px; }
+  th, td { border-bottom:1px solid var(--line); padding:8px 10px; text-align:left; white-space:nowrap; }
+  th { background:#eef4f9; font-size:13px; position:sticky; top:0; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .empty { color:var(--sub); padding:16px 0; }
+  .note { font-size:12px; color:var(--sub); margin:8px 0 0; }
+  .excel { background:#1d7a45; color:#fff; font-weight:bold; font-size:15px; padding:10px 18px; }
+  .excel:hover { background:#16613a; }
+  .exportbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📊 運動記録の一覧（研究用）</h1>
+    <p>香川大学 消化器内科　研究用アプリ（デモ）</p>
+  </div>
+  <button class="excel" id="exportXlsx">📥 Excel で出力</button>
+</header>
+<div class="demo">デモ版です。この端末のブラウザに保存された記録だけが表示されます。本番では研究用のデータベース（Firebase）から読み込み、許可された医療者だけが見られるようにします。</div>
+
+<main>
+  <section class="card">
+    <h2>絞り込み</h2>
+    <div class="filters">
+      <div><label for="fId">研究ID</label><select id="fId"></select></div>
+      <div><label for="fFrom">期間（開始）</label><input id="fFrom" type="date"></div>
+      <div><label for="fTo">期間（終了）</label><input id="fTo" type="date"></div>
+      <button class="ghost" id="clear">条件をクリア</button>
+      <button class="ghost" id="seed">デモデータを入れる</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>まとめ（絞り込みの結果）</h2>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <section class="card">
+    <h2>研究IDごとの集計</h2>
+    <div class="tablewrap"><table id="summary"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>入力された記録（すべて）</h2>
+    <div class="exportbar">
+      <button class="excel" id="exportXlsx2">📥 Excel で出力</button>
+      <span class="note" style="margin:0">いま絞り込んでいる記録を、「運動記録」「研究IDごとの集計」の2シートで出力します。</span>
+    </div>
+    <div class="tablewrap"><table id="detail"></table></div>
+    <p class="note">消費カロリーは METs × 体重 × 時間 による目安です。患者さんの画面では、評価や助言は表示していません。</p>
+  </section>
+</main>
+
+<script src="common.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+
+  function filtered() {
+    const id = $("fId").value, from = $("fFrom").value, to = $("fTo").value;
+    return loadRecords()
+      .filter(r => (!id || r.researchId === id) && (!from || r.date >= from) && (!to || r.date <= to))
+      .sort((a, b) => a.researchId.localeCompare(b.researchId) || a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+  }
+
+  function summarize(rows) {
+    const map = new Map();
+    for (const r of rows) {
+      if (!map.has(r.researchId)) map.set(r.researchId, { days: new Set(), stepsSum: 0, stepsDays: 0, minutes: 0, kcal: 0, count: 0, first: r.date, last: r.date });
+      const s = map.get(r.researchId);
+      s.days.add(r.date); s.count++;
+      if (r.steps !== null && r.steps !== undefined) { s.stepsSum += r.steps; s.stepsDays++; }
+      s.minutes += r.minutes || 0; s.kcal += r.kcal || 0;
+      if (r.date < s.first) s.first = r.date;
+      if (r.date > s.last) s.last = r.date;
+    }
+    return [...map.entries()].map(([researchId, s]) => ({
+      研究ID: researchId,
+      記録日数: s.days.size,
+      記録件数: s.count,
+      平均歩数: s.stepsDays ? Math.round(s.stepsSum / s.stepsDays) : null,
+      "運動時間の合計（分）": s.minutes,
+      "消費カロリー目安の合計（kcal）": s.kcal,
+      最初の記録日: s.first,
+      最後の記録日: s.last,
+    }));
+  }
+
+  function detailRows(rows) {
+    return rows.map(r => ({
+      研究ID: r.researchId,
+      日付: r.date,
+      歩数: r.steps ?? null,
+      運動の種類: r.exercise ? exerciseName(r.exercise) : "",
+      "時間（分）": r.minutes ?? null,
+      "消費カロリー目安（kcal）": r.kcal ?? null,
+      メモ: r.memo || "",
+      入力日時: new Date(r.createdAt).toLocaleString("ja-JP"),
+    }));
+  }
+
+  function tableHtml(objs) {
+    if (!objs.length) return '<tr><td class="empty">記録はまだありません。患者さん用の画面で入力するか、「デモデータを入れる」を押してください。</td></tr>';
+    const keys = Object.keys(objs[0]);
+    // 数字の列は見出しも右にそろえる
+    const numCols = new Set(keys.filter(k => objs.some(o => typeof o[k] === "number")));
+    const head = "<tr>" + keys.map(k => `<th class="${numCols.has(k) ? "num" : ""}">${escapeHtml(k)}</th>`).join("") + "</tr>";
+    const body = objs.map(o => "<tr>" + keys.map(k => {
+      const v = o[k];
+      const isNum = typeof v === "number";
+      return `<td class="${isNum ? "num" : ""}">${v === null ? "—" : escapeHtml(isNum ? v.toLocaleString() : v)}</td>`;
+    }).join("") + "</tr>").join("");
+    return head + body;
+  }
+
+  function render() {
+    const all = loadRecords();
+    const ids = [...new Set(all.map(r => r.researchId))].sort();
+    const cur = $("fId").value;
+    $("fId").innerHTML = '<option value="">すべて</option>' + ids.map(i => `<option ${i === cur ? "selected" : ""}>${escapeHtml(i)}</option>`).join("");
+
+    const rows = filtered();
+    const sum = summarize(rows);
+    const stepVals = rows.filter(r => r.steps !== null && r.steps !== undefined).map(r => r.steps);
+    $("stats").innerHTML = [
+      ["研究IDの数", sum.length],
+      ["記録件数", rows.length],
+      ["平均歩数", stepVals.length ? Math.round(stepVals.reduce((a, b) => a + b, 0) / stepVals.length).toLocaleString() : "—"],
+      ["運動時間の合計", rows.reduce((a, r) => a + (r.minutes || 0), 0).toLocaleString() + " 分"],
+    ].map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("");
+    $("summary").innerHTML = tableHtml(sum);
+    $("detail").innerHTML = tableHtml(detailRows(rows));
+  }
+
+  ["fId", "fFrom", "fTo"].forEach(id => $(id).addEventListener("change", render));
+  $("clear").onclick = () => { $("fId").value = ""; $("fFrom").value = ""; $("fTo").value = ""; render(); };
+
+  $("seed").onclick = () => {
+    if (!confirm("架空の研究ID 3人分・30日分のデモデータを追加しますか？")) return;
+    seedDemo();
+    render();
+  };
+
+  // research.html?demo=1 で開くと、記録が空のときだけデモデータを入れる
+  if (new URLSearchParams(location.search).get("demo") === "1" && !loadRecords().length) seedDemo();
+
+  $("exportXlsx").onclick = () => {
+    const rows = filtered();
+    const detail = detailRows(rows), sum = summarize(rows);
+    const stamp = todayStr().replaceAll("-", "");
+    if (window.XLSX) {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), "運動記録");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sum), "研究IDごとの集計");
+      XLSX.writeFile(wb, `運動記録_${stamp}.xlsx`);
+    } else {
+      // ネットにつながらず Excel 用の部品を読めないときは、Excel で開ける CSV にする
+      const keys = detail.length ? Object.keys(detail[0]) : [];
+      const csv = [keys.join(","), ...detail.map(o => keys.map(k => `"${String(o[k] ?? "").replaceAll('"', '""')}"`).join(","))].join("\r\n");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
+      a.download = `運動記録_${stamp}.csv`;
+      a.click();
+    }
+  };
+
+  $("exportXlsx2").onclick = $("exportXlsx").onclick;
+
+  window.addEventListener("storage", render);
+  render();
+</script>
+</body>
+</html>
