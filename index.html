@@ -3,28 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>運動記録アプリ（簡易デモ）</title>
+<title>運動目標・実績共有アプリ（簡易デモ）</title>
 <style>
   body { margin:0; font:16px/1.8 "Yu Gothic UI","Hiragino Sans",Meiryo,sans-serif; background:#f3f7f5; color:#24403a; }
-  main { max-width:640px; margin:40px auto; padding:0 16px; }
-  h1 { font-size:22px; }
-  a.box { display:block; background:#fff; border-radius:14px; padding:18px 20px; margin:12px 0; text-decoration:none; color:inherit; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  main { max-width:680px; margin:40px auto; padding:0 16px; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .lead { margin:0 0 18px; color:#4d625b; font-size:15px; }
+  a.box { display:block; background:#fff; border-radius:14px; padding:16px 20px; margin:12px 0; text-decoration:none; color:inherit; box-shadow:0 1px 3px rgba(0,0,0,.06); border-left:6px solid #2e8b6e; }
+  a.box.doc { border-left-color:#1f5b8c; }
   a.box b { font-size:18px; }
   a.box span { display:block; font-size:14px; color:#6b7f78; }
-  ul { font-size:14px; color:#4d625b; }
+  h2 { font-size:16px; margin:26px 0 6px; }
+  ul { font-size:14px; color:#4d625b; margin:0; }
+  .flow { background:#fff; border-radius:14px; padding:14px 18px; font-size:14px; color:#4d625b; margin:18px 0; }
+  .flow b { color:#1f5b8c; }
+  .demo { font-size:14px; margin-top:20px; }
+  .demo a { color:#1f5b8c; }
 </style>
 </head>
 <body>
 <main>
-  <h1>運動記録アプリ（簡易デモ）</h1>
-  <a class="box" href="patient.html"><b>① 患者さん用：運動を入力する</b><span>研究IDで入力します。歩数・運動の種類・時間・メモ</span></a>
-  <a class="box" href="research.html"><b>② 研究用：全員の入力を見る・Excel で出力</b><span>研究IDごとの集計と、すべての記録の一覧</span></a>
-  <h2 style="font-size:16px">患者さん用の画面に入れていないもの</h2>
+  <h1>運動目標・実績共有アプリ（簡易デモ）</h1>
+  <p class="lead">医師が決めた運動の目標と内容を、患者さん・看護師・医師で共有するアプリのデモです。医学的な判断は医師が行い、アプリは「記録・計算・表示・共有」だけをします。</p>
+
+  <a class="box doc" href="doctor.html"><b>① 医師用：目標と運動内容を設定する</b><span>目標の項目と値、運動内容を入力します。InBody などの測定値の取り込みもここです</span></a>
+  <a class="box" href="patient.html"><b>② 患者さん用：目標を見る・運動を記録する</b><span>医師が設定した目標と運動内容、目標までの差、今週の達成率が見られます</span></a>
+  <a class="box doc" href="research.html"><b>③ 看護師・医師用：実施状況を確認する・Excel で出力</b><span>患者さんごとの目標・現在値・今週の実施と、記録の一覧（見るだけ）</span></a>
+
+  <div class="flow"><b>流れ：</b>医師が入力 → アプリが保存 → 目標との差を計算 → 患者さんの画面に表示 → 看護師・医師が実施状況を確認</div>
+
+  <h2>この画面でしないこと</h2>
   <ul>
-    <li>数値に対する評価や判定（「多め」「肥満」などの表示）</li>
-    <li>基準値との比較、検査結果の入力</li>
-    <li>数値に応じた運動やリハビリのおすすめ</li>
+    <li>病状の診断や、「改善」「悪化」「正常」などの評価の表示</li>
+    <li>基準値による色分けや警告</li>
+    <li>測定値や検査結果から、運動やリハビリを選ぶこと・おすすめすること</li>
+    <li>医師の設定なしに、目標や運動内容を変えること</li>
   </ul>
+
+  <p class="demo">デモデータで見る：
+    <a href="doctor.html?demo=1">医師用</a> ／ <a href="patient.html?demo=1">患者さん用（K-001）</a> ／ <a href="research.html?demo=1">看護師・医師用</a>
+  </p>
   <p style="font-size:13px;color:#6b7f78">デモ版のため、記録はこの端末のブラウザにだけ保存されます。本物の患者さんの情報は入れないでください。</p>
 </main>
 </body>

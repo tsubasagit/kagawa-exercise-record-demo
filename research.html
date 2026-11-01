@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>運動記録の一覧（研究用・デモ）</title>
+<title>実施状況の確認（看護師・医師用・デモ）</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root { --main:#1f5b8c; --bg:#f4f7fa; --ink:#12324d; --sub:#5b7a94; --line:#d6e2ec; }
@@ -41,14 +41,21 @@
 <body>
 <header>
   <div>
-    <h1>📊 運動記録の一覧（研究用）</h1>
+    <h1>📊 実施状況の確認（看護師・医師用）</h1>
     <p>香川大学 消化器内科　研究用アプリ（デモ）</p>
   </div>
   <button class="excel" id="exportXlsx">📥 Excel で出力</button>
 </header>
-<div class="demo">デモ版です。この端末のブラウザに保存された記録だけが表示されます。本番では研究用のデータベース（Firebase）から読み込み、許可された医療者だけが見られるようにします。</div>
+<div class="demo">デモ版です。この端末のブラウザに保存された記録だけが表示されます。この画面は見るだけです（目標と運動内容を変えられるのは、医師用の画面だけです）。本番では研究用のデータベース（Firebase）から読み込み、許可された医療者だけが見られるようにします。</div>
 
 <main>
+  <p class="note" style="margin:0 0 10px"><a href="index.html" style="color:var(--main)">← 入口にもどる</a></p>
+  <section class="card">
+    <h2>患者さんごとの状況</h2>
+    <p class="note" style="margin:0 0 8px">医師が設定した目標と、いまの測定値、今週の実施をならべて表示します。良し悪しの評価はしません。お知らせは、記録がないという事実だけです。</p>
+    <div class="tablewrap"><table id="status"></table></div>
+  </section>
+
   <section class="card">
     <h2>絞り込み</h2>
     <div class="filters">
@@ -74,7 +81,7 @@
     <h2>入力された記録（すべて）</h2>
     <div class="exportbar">
       <button class="excel" id="exportXlsx2">📥 Excel で出力</button>
-      <span class="note" style="margin:0">いま絞り込んでいる記録を、「運動記録」「研究IDごとの集計」の2シートで出力します。</span>
+      <span class="note" style="margin:0">「目標と実施状況」「運動記録」「研究IDごとの集計」の3シートで出力します（運動記録と集計は、いま絞り込んでいる記録です）。</span>
     </div>
     <div class="tablewrap"><table id="detail"></table></div>
     <p class="note">消費カロリーは METs × 体重 × 時間 による目安です。患者さんの画面では、評価や助言は表示していません。</p>
@@ -129,7 +136,7 @@
   }
 
   function tableHtml(objs) {
-    if (!objs.length) return '<tr><td class="empty">記録はまだありません。患者さん用の画面で入力するか、「デモデータを入れる」を押してください。</td></tr>';
+    if (!objs.length) return '<tr><td class="empty">まだありません。患者さん用の画面で入力するか、「デモデータを入れる」を押してください。</td></tr>';
     const keys = Object.keys(objs[0]);
     // 数字の列は見出しも右にそろえる
     const numCols = new Set(keys.filter(k => objs.some(o => typeof o[k] === "number")));
@@ -142,7 +149,26 @@
     return head + body;
   }
 
+  // 患者さんごとの状況（引き算・割り算と事実だけ）
+  function statusRows() {
+    return knownResearchIds().map(id => {
+      const plan = currentPlan(id), g = goalStatus(id), wk = weekStatus(id);
+      const m = g ? g.metric : null;
+      return {
+        研究ID: id,
+        医師が設定した目標: g ? `${m.label} ${fmtNum(g.start)}→${fmtNum(g.goal)}${m.unit}` : "未設定",
+        運動内容: plan ? plan.exerciseText : "—",
+        現在値: g && g.current !== null ? `${fmtNum(g.current)}${m.unit}（${g.currentDate.slice(5).replace("-", "/")}）` : "—",
+        目標との差: g && g.current !== null ? (g.reached ? "目標に届いている" : `あと${fmtNum(g.remaining)}${m.diffUnit}`) : "—",
+        今週の実施: plan && wk.target ? `${wk.done}日／週${wk.target}日（${wk.rate}％）` : `${wk.done}日`,
+        最後の記録日: lastRecordDate(id) || "—",
+        お知らせ: gapNotice(id) || "—",
+      };
+    });
+  }
+
   function render() {
+    $("status").innerHTML = tableHtml(statusRows());
     const all = loadRecords();
     const ids = [...new Set(all.map(r => r.researchId))].sort();
     const cur = $("fId").value;
@@ -165,13 +191,13 @@
   $("clear").onclick = () => { $("fId").value = ""; $("fFrom").value = ""; $("fTo").value = ""; render(); };
 
   $("seed").onclick = () => {
-    if (!confirm("架空の研究ID 3人分・30日分のデモデータを追加しますか？")) return;
+    if (!confirm("架空の研究ID 3人分（K-001〜K-003）のデモデータを入れますか？同じ研究IDの記録・設定・測定値は、デモの内容に置き換わります。")) return;
     seedDemo();
     render();
   };
 
-  // research.html?demo=1 で開くと、記録が空のときだけデモデータを入れる
-  if (new URLSearchParams(location.search).get("demo") === "1" && !loadRecords().length) seedDemo();
+  // research.html?demo=1 で開くと、何も入っていないときだけデモデータを入れる
+  seedIfDemoRequested();
 
   $("exportXlsx").onclick = () => {
     const rows = filtered();
@@ -179,6 +205,7 @@
     const stamp = todayStr().replaceAll("-", "");
     if (window.XLSX) {
       const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(statusRows()), "目標と実施状況");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), "運動記録");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sum), "研究IDごとの集計");
       XLSX.writeFile(wb, `運動記録_${stamp}.xlsx`);

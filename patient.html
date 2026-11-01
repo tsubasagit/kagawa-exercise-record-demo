@@ -32,6 +32,21 @@
   ul.list li:first-child { border-top:0; }
   .del { background:none; color:#a33; font-size:14px; padding:4px 8px; }
   .empty { color:var(--sub); font-size:14px; }
+  .plan-label { font-size:13px; color:var(--sub); margin:0; }
+  .plan-goal { font-size:26px; font-weight:bold; color:var(--main-d); margin:0 0 10px; }
+  .bar { position:relative; height:16px; background:#e3efe9; border-radius:8px; margin:22px 0 6px; }
+  .bar .fill { position:absolute; left:0; top:0; height:16px; background:var(--main); border-radius:8px; }
+  .bar .dot { position:absolute; top:-6px; width:28px; height:28px; border-radius:50%; background:var(--main-d); border:4px solid #fff; transform:translateX(-50%); }
+  .barlabels { display:flex; justify-content:space-between; font-size:13px; color:var(--sub); }
+  .msg { background:#f1f8f5; border-left:5px solid var(--main); border-radius:0 10px 10px 0; padding:10px 14px; margin:14px 0 0; font-size:16px; }
+  .extext { font-size:20px; font-weight:bold; margin:2px 0 12px; white-space:pre-wrap; }
+  .week { display:flex; gap:6px; }
+  .week div { flex:1; text-align:center; border-radius:8px; padding:6px 0; background:#eef4f1; color:var(--sub); font-size:14px; }
+  .week div.done { background:var(--main); color:#fff; }
+  .week div.future { opacity:.55; }
+  .rate { font-size:16px; margin-top:10px; }
+  .rate b { font-size:24px; color:var(--main-d); }
+  .doctor-note { font-size:12px; color:var(--sub); margin:10px 0 0; }
 </style>
 </head>
 <body>
@@ -49,6 +64,11 @@
     <label for="weight">体重 kg（消費カロリーの目安を出すときだけ使います・空欄でもOK）</label>
     <input id="weight" type="number" inputmode="decimal" step="0.1" min="20" max="250" placeholder="例：70">
     <button class="ghost" id="saveProfile" style="margin-top:12px">保存する</button>
+  </section>
+
+  <section class="card" id="planCard">
+    <h2>医師が設定した目標と運動</h2>
+    <div id="planBody"></div>
   </section>
 
   <section class="card">
@@ -94,10 +114,8 @@
   $("date").value = todayStr();
 
   // patient.html?demo=1 で開くと、架空の研究ID K-001 とデモデータで表示する
-  if (new URLSearchParams(location.search).get("demo") === "1") {
-    if (!loadRecords().length) seedDemo();
-    if (!loadProfile().researchId) saveProfile({ researchId: "K-001", weight: "82" });
-  }
+  seedIfDemoRequested();
+  if (new URLSearchParams(location.search).get("demo") === "1" && !loadProfile().researchId) saveProfile({ researchId: "K-001", weight: "82" });
   const profile = loadProfile();
   $("researchId").value = profile.researchId || "";
   $("weight").value = profile.weight || "";
@@ -151,7 +169,33 @@
     render();
   };
 
+  // 医師が設定した内容は、そのまま表示する。評価の言葉は出さない。
+  function renderPlan() {
+    const rid = $("researchId").value.trim();
+    const plan = rid ? currentPlan(rid) : null;
+    if (!rid) { $("planBody").innerHTML = '<p class="empty">研究IDを入力すると、医師が設定した目標が表示されます。</p>'; return; }
+    if (!plan) { $("planBody").innerHTML = '<p class="empty">医師が設定した目標は、まだありません。</p>'; return; }
+    const g = goalStatus(rid), m = g.metric;
+    const wk = weekStatus(rid);
+    const pct = Math.round(g.ratio * 100);
+    let html = `<p class="plan-label">目標（${escapeHtml(m.label)}）</p><p class="plan-goal">${fmtNum(g.goal)}${m.unit}</p>`;
+    if (g.current !== null) {
+      html += `<div class="bar"><div class="fill" style="width:${pct}%"></div><div class="dot" style="left:${pct}%"></div></div>
+        <div class="barlabels"><span>はじめ ${fmtNum(g.start)}${m.unit}</span><span>いま ${fmtNum(g.current)}${m.unit}</span><span>目標 ${fmtNum(g.goal)}${m.unit}</span></div>`;
+    }
+    html += `<div class="msg">${escapeHtml(g.message)}</div>`;
+    if (g.currentDate) html += `<p class="doctor-note">測定日：${g.currentDate.replaceAll("-", "/")}</p>`;
+    html += `<hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+      <p class="plan-label">運動内容</p><p class="extext">${escapeHtml(plan.exerciseText)}</p>
+      <div class="week">${wk.days.map(d => `<div class="${d.done ? "done" : ""} ${d.future ? "future" : ""}">${d.label}<br>${d.done ? "✓" : "―"}</div>`).join("")}</div>`;
+    if (wk.rate !== null) html += `<div class="rate">今週の達成率　<b>${wk.rate}％</b>　<span class="note">（${wk.done <= wk.target ? `週${wk.target}日のうち${wk.done}日` : `週${wk.target}日の目標に対して${wk.done}日`}）</span></div>`;
+    else html += `<div class="rate">今週の実施　<b>${wk.done}日</b></div>`;
+    html += `<p class="doctor-note">運動内容を変えられるのは医師だけです。医師が設定を更新すると、この画面が変わります。</p>`;
+    $("planBody").innerHTML = html;
+  }
+
   function render() {
+    renderPlan();
     const rid = $("researchId").value.trim();
     const mine = loadRecords().filter(r => r.researchId === rid)
       .sort((a, b) => (b.date + b.createdAt).localeCompare(a.date + a.createdAt));
